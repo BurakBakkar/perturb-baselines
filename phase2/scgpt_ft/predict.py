@@ -27,9 +27,25 @@ def forward_all_genes(model, values: torch.Tensor, flags: torch.Tensor, gene_ids
     return out["mlm_output"].float()
 
 
-@torch.no_grad()
+def _release_cached_gpu_memory() -> None:
+    # Training (~9 GB) and inference (~8 GB) caches together exceed 16 GB; on WSL the driver then
+    # spills to host RAM and runs ~3x slower instead of raising OOM.
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def predict_delta(model, cells: Cells, perts, gene_ids, pool_size: int, batch_size: int,
                   seed: int, amp: bool) -> np.ndarray:
+    _release_cached_gpu_memory()
+    try:
+        return _predict_delta(model, cells, perts, gene_ids, pool_size, batch_size, seed, amp)
+    finally:
+        _release_cached_gpu_memory()
+
+
+@torch.no_grad()
+def _predict_delta(model, cells: Cells, perts, gene_ids, pool_size: int, batch_size: int,
+                   seed: int, amp: bool) -> np.ndarray:
     n_genes = cells.X.shape[1]
     ctrl_mean = cells.ctrl_mean()
     out = np.empty((len(perts), n_genes), np.float32)

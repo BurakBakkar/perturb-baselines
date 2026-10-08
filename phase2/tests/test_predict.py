@@ -92,3 +92,12 @@ def test_save_preds_contract(tmp_path):
         save_preds(tmp_path / "bad.npz", ["A"], ["G0"], np.full((1, 1), np.nan))
     with pytest.raises(ValueError):
         save_preds(tmp_path / "bad.npz", ["A"], ["G0", "G1"], np.zeros((1, 1)))
+
+
+def test_predict_releases_cached_gpu_memory_before_and_after(cells, monkeypatch):
+    """Training and inference caches together exceed 16 GB; on WSL that spills to host RAM."""
+    calls = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: calls.append(1))
+    predict_delta(EchoModel(), cells, ["G0"], IDS, 4, 4, seed=0, amp=False)
+    assert len(calls) == 2
