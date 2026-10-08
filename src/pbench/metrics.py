@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import cdist  # noqa: F401  (for discrimination_rank)
+from scipy.spatial.distance import cdist
 
 METRICS = ("pearson_all", "pearson_de", "pearson_centered", "disc_rank")
 
@@ -29,8 +29,15 @@ def discrimination_rank(pred: np.ndarray, obs: np.ndarray) -> np.ndarray:
     Distance is L1 (cityblock) over all genes. Returns NaN for every row when m < 2
     (no other perturbations to compare against).
     """
-    # TODO(user): implement — see the request in the conversation.
-    raise NotImplementedError
+    m = len(pred)
+    if m < 2:
+        return np.full(m, np.nan)
+    dist = cdist(np.asarray(pred, np.float64), np.asarray(obs, np.float64), "cityblock")
+    own = np.diag(dist)[:, None]
+    less = (dist < own).sum(axis=1)
+    ties = (dist == own).sum(axis=1) - 1  # exclude the diagonal itself
+    # Ties count half, so a constant predictor (all distances tie) lands at chance, 0.5.
+    return (less + 0.5 * ties) / (m - 1)
 
 
 def per_pert_metrics(pred, obs, de_idx, train_mean) -> pd.DataFrame:
