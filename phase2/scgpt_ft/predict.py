@@ -7,20 +7,24 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from scgpt.utils import map_raw_id_to_vocab_id
 
 from scgpt_ft.data import Cells, pert_flags
 
 
-class _Batch:
-    """The two attributes of a GEARS batch that TransformerGenerator.pred_perturb reads."""
-
-    def __init__(self, x: torch.Tensor, n: int):
-        self.x = x
-        self.pert = ["_"] * n
-
-    def to(self, device):
-        self.x = self.x.to(device)
-        return self
+def forward_all_genes(model, values: torch.Tensor, flags: torch.Tensor, gene_ids,
+                      amp: bool) -> torch.Tensor:
+    """TransformerGenerator.pred_perturb(include_zero_gene="all") without its all-False padding
+    mask: same outputs, but lets PyTorch use memory-efficient attention over 5,000 genes."""
+    model.eval()
+    device = next(model.parameters()).device
+    values, flags = values.to(device), flags.to(device)
+    ids = torch.arange(values.shape[1], device=device)
+    mapped = map_raw_id_to_vocab_id(ids, gene_ids).repeat(len(values), 1)
+    with torch.cuda.amp.autocast(enabled=amp):
+        out = model(mapped, values, flags, src_key_padding_mask=None, CLS=False, CCE=False,
+                    MVC=False, ECS=False, do_sample=True)
+    return out["mlm_output"].float()
 
 
 @torch.no_grad()
@@ -34,15 +38,13 @@ def predict_delta(model, cells: Cells, perts, gene_ids, pool_size: int, batch_si
         rng = np.random.default_rng([seed, zlib.crc32(p.encode())])
         n_ctrl = len(cells.ctrl_rows)
         rows = rng.choice(cells.ctrl_rows, pool_size, replace=pool_size > n_ctrl)
-        flags = torch.as_tensor(pert_flags(p, cells.gene_index, n_genes), dtype=torch.float32)
+        flags = torch.as_tensor(pert_flags(p, cells.gene_index, n_genes))
         total = np.zeros(n_genes, np.float64)
         for start in range(0, len(rows), batch_size):
             chunk = rows[start:start + batch_size]
             vals = torch.as_tensor(cells.dense(chunk))
-            x = torch.stack([vals.reshape(-1), flags.repeat(len(chunk))], dim=1)
-            pred = model.pred_perturb(_Batch(x, len(chunk)), include_zero_gene="all",
-                                      gene_ids=gene_ids, amp=amp)
-            total += pred.float().cpu().numpy().astype(np.float64).sum(axis=0)
+            pred = forward_all_genes(model, vals, flags.repeat(len(chunk), 1), gene_ids, amp)
+            total += pred.cpu().numpy().astype(np.float64).sum(axis=0)
         out[i] = total / len(rows) - ctrl_mean
     return out
 

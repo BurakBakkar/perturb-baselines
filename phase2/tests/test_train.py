@@ -45,3 +45,21 @@ def test_fit_runs_and_returns_best_state(cells):
     assert len(hist) == 2 and {"epoch", "train_loss", "val_pearson", "seconds"} <= set(hist[0])
     assert set(state) == set(model.state_dict())
     assert all(np.isfinite(h["train_loss"]) for h in hist)
+
+
+def test_train_step_passes_no_padding_mask(cells):
+    """All genes are real tokens; an all-False mask would force PyTorch's O(L²)-memory attention."""
+    vocab = make_vocab(cells.genes.tolist())
+    model = make_model(vocab, TINY)
+    seen = {}
+    orig = model.forward
+
+    def spy(*args, **kwargs):
+        seen["mask"] = kwargs.get("src_key_padding_mask", "missing")
+        return orig(*args, **kwargs)
+
+    model.forward = spy
+    batch = (torch.rand(2, 12), torch.zeros(2, 12, dtype=torch.long), torch.rand(2, 12))
+    ids = gene_ids_for(cells.genes.tolist(), vocab)
+    train_step(model, batch, ids, TrainConfig(amp=False), "cpu")
+    assert seen["mask"] is None

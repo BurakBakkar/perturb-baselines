@@ -59,9 +59,10 @@ def train_step(model, batch, gene_ids, cfg: TrainConfig, device) -> torch.Tensor
     input_flags = flags[:, input_gene_ids]
     target_values = target[:, input_gene_ids]
     mapped = map_raw_id_to_vocab_id(input_gene_ids, gene_ids).repeat(bsz, 1)
-    pad_mask = torch.zeros_like(values, dtype=torch.bool, device=device)
+    # The tutorial passes an all-False padding mask. It masks nothing (outputs are identical) but
+    # forces PyTorch's O(L²)-memory attention kernel, which does not fit 16 GB; pass None instead.
     with torch.cuda.amp.autocast(enabled=cfg.amp):
-        out = model(mapped, values, input_flags, src_key_padding_mask=pad_mask,
+        out = model(mapped, values, input_flags, src_key_padding_mask=None,
                     CLS=False, CCE=False, MVC=False, ECS=False)
         positions = torch.ones_like(values, dtype=torch.bool)
         return masked_mse_loss(out["mlm_output"], target_values, positions)
