@@ -65,6 +65,12 @@ def _predict_delta(model, cells: Cells, perts, gene_ids, pool_size: int, batch_s
     return out
 
 
+def subset_rows(perts, delta: np.ndarray, subset) -> np.ndarray:
+    """Rows of `delta` (one per name in `perts`) for the names in `subset`, in that order."""
+    index = {p: i for i, p in enumerate(perts)}
+    return delta[[index[p] for p in subset]]
+
+
 def save_preds(path, perts, genes, delta_pred) -> None:
     """Same file contract as pbench.preds.save_preds (re-implemented: no cross-env imports)."""
     delta_pred = np.asarray(delta_pred, np.float32)

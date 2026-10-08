@@ -101,3 +101,13 @@ def test_predict_releases_cached_gpu_memory_before_and_after(cells, monkeypatch)
     monkeypatch.setattr(torch.cuda, "empty_cache", lambda: calls.append(1))
     predict_delta(EchoModel(), cells, ["G0"], IDS, 4, 4, seed=0, amp=False)
     assert len(calls) == 2
+
+
+def test_subset_rows_follows_requested_order():
+    from scgpt_ft.predict import subset_rows
+
+    delta = np.arange(12, dtype=np.float32).reshape(3, 4)
+    out = subset_rows(["A", "B", "C"], delta, ["C", "A"])
+    assert np.array_equal(out, delta[[2, 0]])
+    with pytest.raises(KeyError):
+        subset_rows(["A"], delta[:1], ["Z"])

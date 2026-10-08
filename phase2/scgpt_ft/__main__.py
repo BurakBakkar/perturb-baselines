@@ -12,7 +12,7 @@ import yaml
 
 from scgpt_ft.data import load_cells
 from scgpt_ft.model import build_model
-from scgpt_ft.predict import predict_delta, save_preds
+from scgpt_ft.predict import predict_delta, save_preds, subset_rows
 from scgpt_ft.split import make_gears_split
 from scgpt_ft.train import TrainConfig, check_split, fit, split_val
 
@@ -78,13 +78,15 @@ def cmd_run(args):
     ckpt = Path(args.checkpoint)
     ckpt.parent.mkdir(parents=True, exist_ok=True)
     torch.save(state, ckpt)
-    views = {"": split["test"]}
-    if "test_measured" in split:
-        views = {"all": split["test"], "measured": split["test_measured"]}
+    test = split["test"]
+    delta = predict_delta(model, cells, test, gene_ids, cfg.pool_size, cfg.eval_batch_size,
+                          cfg.seed, cfg.amp)
+    views = {"": test}
+    if "test_measured" in split:  # the measured view is a subset: reuse its rows
+        views = {"all": test, "measured": split["test_measured"]}
     for sub, perts in views.items():
-        delta = predict_delta(model, cells, perts, gene_ids, cfg.pool_size, cfg.eval_batch_size,
-                              cfg.seed, cfg.amp)
-        save_preds(out / sub / f"{METHOD}.npz", perts, cells.out_genes, delta)  # overwrites
+        save_preds(out / sub / f"{METHOD}.npz", perts, cells.out_genes,
+                   subset_rows(test, delta, perts))  # overwrites
     info = {"split": args.split, "n_fit": len(fit_perts), "n_val": len(val_perts),
             "n_test": len(split["test"]), "history": hist, "train_config": vars(cfg),
             "minutes": (time.time() - t0) / 60, "checkpoint": str(ckpt)}
