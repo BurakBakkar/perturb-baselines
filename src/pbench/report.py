@@ -101,6 +101,7 @@ def _breakdown_plot(bd: pd.DataFrame, path: Path) -> None:
                         marker="o", capsize=3, label=m)
         ax.axhline(0, color="grey", lw=0.8)
         ax.set_title(c)
+        ax.set_xticks(sorted(bd["bin"].unique()))
         ax.set_xlabel("tertile (low → high)")
     np.atleast_1d(axes)[0].set_ylabel(f"Δ {HEADLINE} vs best baseline")
     np.atleast_1d(axes)[-1].legend(fontsize=7)
