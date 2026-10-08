@@ -29,8 +29,14 @@ def split_method(method: str) -> tuple[str, str | None]:
 def best_baseline(df: pd.DataFrame, metric: str = HEADLINE) -> str:
     means = df.groupby("method")[metric].mean()
     ok = [m for m in means.index
-          if m != "noise_ceiling" and split_method(m)[1] not in FM_EMBEDDINGS]
+          if not m.startswith("noise_ceiling") and split_method(m)[1] not in FM_EMBEDDINGS]
     return means[ok].idxmax()
+
+
+def fm_vs(df: pd.DataFrame, reference: str, metric: str = HEADLINE) -> pd.DataFrame:
+    """Paired tests of the foundation-model methods only against one reference (own Holm family)."""
+    fm = [m for m in df.method.unique() if split_method(m)[1] in FM_EMBEDDINGS]
+    return paired_tests(df[df.method.isin([*fm, reference])], metric, reference)
 
 
 def covariates(data: PerturbData, folds, go_counts: pd.Series | None) -> pd.DataFrame:
@@ -127,6 +133,8 @@ def make_report(cfg) -> None:
     ref = best_baseline(df)
     tests = pd.concat([paired_tests(df, m, ref) for m in METRICS], ignore_index=True)
     tests.to_csv(final / "paired_tests.csv", index=False)
+    if "ridge__pca" in set(df.method):  # FMs vs the data-only embedding (measured-target run)
+        fm_vs(df, "ridge__pca").to_csv(final / "paired_tests_fm_vs_pca.csv", index=False)
     _heatmap(df, final / "heatmap.png")
 
     keep = json.loads((run / "fair_set.json").read_text())["kept"]

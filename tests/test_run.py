@@ -65,3 +65,36 @@ def test_fair_set_written_and_applied(tmp_path):
     fair = json.loads((tmp_path / "fair" / "fair_set.json").read_text())
     assert fair["dropped"]["truth"] == ["G0", "G1"]
     assert fair["n_kept"] == len(data.perts) - 2
+
+
+def test_rerun_with_fewer_methods_drops_stale_predictions(tmp_path):
+    data, truth = make_synthetic()
+    cfg = _cfg(tmp_path, data, "stale", folds=[0])
+    run_experiment(cfg, embeddings=_embs(truth))
+    cfg.models = ["ridge"]
+    df = run_experiment(cfg, embeddings=_embs(truth))
+    assert not any(m.startswith("knn__") for m in df["method"].unique())
+    assert not list((tmp_path / "stale" / "preds" / "cv" / "fold0").glob("knn__*.npz"))
+
+
+def test_spearman_brown_ceiling_tracks_perfect_predictor(tmp_path):
+    # Halves = signal + independent noise; full Δ = their average. A perfect predictor (the signal)
+    # scored against the full Δ is what the corrected ceiling should estimate.
+    rng = np.random.default_rng(0)
+    data, truth = make_synthetic(noise=0.0)
+    signal = data.delta.astype(np.float64)
+    a = signal + 3.0 * rng.normal(size=signal.shape)
+    b = signal + 3.0 * rng.normal(size=signal.shape)
+    noisy = type(data)(perts=data.perts, genes=data.genes, de_idx=data.de_idx,
+                       n_cells=data.n_cells, delta=((a + b) / 2).astype(np.float32),
+                       delta_a=a.astype(np.float32), delta_b=b.astype(np.float32))
+    df = run_experiment(_cfg(tmp_path, noisy, "sb", folds=[0]),
+                        embeddings={"truth": StaticEmbedding("truth", lambda: truth)})
+    sb = df[df.method == "noise_ceiling_sb"]["pearson_all"].mean()
+    half = df[df.method == "noise_ceiling"]["pearson_all"].mean()
+    test = df[df.method == "noise_ceiling"]["pert"].tolist()
+    from pbench.metrics import rowwise_pearson
+    rows = [data.perts.tolist().index(p) for p in test]
+    oracle = rowwise_pearson(signal[rows], ((a + b) / 2)[rows]).mean()
+    assert sb > half
+    assert abs(sb - oracle) < 0.03

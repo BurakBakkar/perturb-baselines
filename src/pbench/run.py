@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,6 +79,8 @@ def run_experiment(cfg: Config, embeddings: dict[str, Embedding] | None = None) 
         train = data.subset(train_perts)
         preds = predict_fold(train, test_perts, embeddings, cfg.models, cfg.seed)
         fold_dir = out / "preds" / "cv" / f"fold{k}"
+        if fold_dir.exists():  # never score predictions left over from an earlier config
+            shutil.rmtree(fold_dir)
         for method, delta_pred in preds.items():
             save_preds(fold_dir / f"{method}.npz", test_perts, data.genes, delta_pred)
         frames.append(evaluate_fold(data, train_perts, test_perts, fold_dir, k))

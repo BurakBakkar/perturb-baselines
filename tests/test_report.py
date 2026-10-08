@@ -44,3 +44,17 @@ def test_covariates_use_train_only_for_similarity(synthetic):
     assert cov["nn_similarity"].between(-1, 1).all()
     assert cov.set_index("pert").loc["G0", "go_terms"] == 3
     assert cov.set_index("pert").loc["G1", "go_terms"] == 0
+
+
+def test_best_baseline_excludes_corrected_ceiling():
+    df = _df()
+    extra = df[df.method == "noise_ceiling"].assign(method="noise_ceiling_sb")
+    assert best_baseline(pd.concat([df, extra])) == "ridge__go"
+
+
+def test_fm_vs_reference_tests_only_fm_methods():
+    from pbench.report import fm_vs
+    out = fm_vs(_df().assign(method=lambda d: d.method.replace({"ridge__go": "ridge__pca"})),
+                "ridge__pca")
+    assert out["method"].tolist() == ["ridge__scgpt"]
+    assert out["mean_diff"].item() > 0
