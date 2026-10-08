@@ -19,8 +19,10 @@ def _find_one(root, name: str) -> Path:
 def load_genept(genept_dir) -> pd.DataFrame:
     with open(_find_one(genept_dir, "GenePT_gene_embedding_ada_text.pickle"), "rb") as f:
         table = pickle.load(f)
-    return pd.DataFrame.from_dict({g: np.asarray(v, np.float32) for g, v in table.items()},
-                                  orient="index")
+    # Stack straight into one float32 matrix; from_dict(orient="index") peaks at several GB.
+    genes = list(table)
+    matrix = np.asarray([table.pop(g) for g in genes], dtype=np.float32)
+    return pd.DataFrame(matrix, index=genes)
 
 
 def scgpt_table(weight: np.ndarray, vocab: dict[str, int]) -> pd.DataFrame:

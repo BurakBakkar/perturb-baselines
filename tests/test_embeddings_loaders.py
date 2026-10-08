@@ -83,3 +83,10 @@ def test_geneformer_table_maps_symbols():
                          {"actb": "ENSG1", "TP53": "ENSG2", "MISSING": "ENSG9"})
     assert sorted(t.index) == ["ACTB", "TP53"]
     np.testing.assert_allclose(t.loc["ACTB"], [2, 3])
+
+
+def test_genept_loader_returns_float32_matrix(tmp_path):
+    with open(tmp_path / "GenePT_gene_embedding_ada_text.pickle", "wb") as f:
+        pickle.dump({"ACTB": [1.0, 2.0], "TP53": [3.0, 4.0]}, f)
+    emb = load_genept(tmp_path)
+    assert all(dt == np.float32 for dt in emb.dtypes)
