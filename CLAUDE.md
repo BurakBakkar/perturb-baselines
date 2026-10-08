@@ -14,7 +14,7 @@ Design spec and plans live in `docs/superpowers/` (local only, gitignored).
 
 ```bash
 uv sync --extra dev --extra fm          # fm = torch (CUDA build), safetensors, huggingface_hub, gdown
-uv run pytest -q                         # whole suite (synthetic data only, ~3 s)
+uv run pytest -q                         # whole suite: 58 tests, synthetic data only, ~3 s
 uv run pytest tests/test_run.py::test_no_leakage_from_held_out_rows -v   # single test
 uv run ruff check .
 

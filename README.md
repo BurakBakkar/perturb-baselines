@@ -32,8 +32,10 @@ describing the knocked-down gene and must output its 5,000-gene Δ.
 | | `scgpt`: scGPT whole-human gene token embeddings |
 | | `geneformer`: Geneformer V2-104M input gene embeddings |
 
-Plus three reference points: `no_change` (Δ = 0), `train_mean` (average training Δ), and a
-**noise ceiling** (correlating Δ from two random halves of each knockdown's cells).
+Plus reference points: `no_change` (Δ = 0), `train_mean` (average training Δ), and a **noise ceiling**.
+`noise_ceiling` correlates Δ from two random halves of each knockdown's cells. Because models are
+scored against the full-sample Δ, the comparable ceiling is the Spearman–Brown-corrected
+`noise_ceiling_sb` = √(2r/(1+r)): the expected score of a noiseless predictor.
 
 **Fair comparison.** A knockdown is evaluated only if *every* embedding in the run covers its target gene.
 PCA can only embed the 412 targets that are among the 5,000 measured genes, so there are two runs:
@@ -57,9 +59,10 @@ method, Holm-corrected across methods.
 
 | method            | pearson_all          | pearson_de           | pearson_centered       | disc_rank            |
 |:------------------|:---------------------|:---------------------|:-----------------------|:---------------------|
+| noise_ceiling_sb  | 0.815 [0.808, 0.822] | 0.990 [0.989, 0.992] | 0.809 [0.802, 0.816]   | nan [nan, nan]       |
 | noise_ceiling     | 0.545 [0.533, 0.559] | 0.965 [0.962, 0.968] | 0.527 [0.515, 0.539]   | 0.081 [0.071, 0.090] |
-| knn__string       | 0.529 [0.514, 0.544] | 0.648 [0.626, 0.670] | **0.418** [0.401, 0.435] | 0.270 [0.254, 0.286] |
-| ridge__string     | 0.490 [0.474, 0.506] | 0.587 [0.566, 0.611] | 0.382 [0.365, 0.398]   | 0.326 [0.311, 0.344] |
+| knn__string       | 0.530 [0.515, 0.545] | 0.648 [0.627, 0.671] | **0.419** [0.402, 0.436] | 0.269 [0.253, 0.285] |
+| ridge__string     | 0.489 [0.473, 0.506] | 0.587 [0.565, 0.611] | 0.382 [0.365, 0.399]   | 0.325 [0.310, 0.343] |
 | knn__go           | 0.511 [0.497, 0.526] | 0.614 [0.592, 0.635] | 0.376 [0.358, 0.393]   | 0.316 [0.299, 0.333] |
 | ridge__go         | 0.496 [0.482, 0.510] | 0.590 [0.570, 0.612] | 0.362 [0.344, 0.378]   | 0.366 [0.349, 0.383] |
 | ridge__genept     | 0.482 [0.468, 0.497] | 0.589 [0.568, 0.613] | 0.335 [0.318, 0.352]   | 0.377 [0.360, 0.393] |
@@ -77,14 +80,16 @@ method, Holm-corrected across methods.
 
 **Reading the heatmap.** The embedding matters much more than the model. The ranking
 STRING > GO > GenePT > scGPT > Geneformer ≫ random holds for both ridge and kNN. The best method,
-kNN on STRING, closes about 79% of the gap between `train_mean` (0) and the noise ceiling (0.527).
+kNN on STRING (0.419), closes about half (52%) of the gap between `train_mean` (0) and the
+corrected noise ceiling (0.809), so there is plenty of room left.
 
 ### Measured-target run (395 knockdowns, adds PCA)
 
-Same ranking. The best method here is `ridge__string` (0.344); `knn__string` is statistically tied
-(Δ = −0.004, p_holm = 0.90). scGPT (0.230) and Geneformer (0.221) with ridge beat the data-only PCA
-embedding (0.185), by +0.045 (p_holm = 5e-4) and +0.037 (p_holm = 0.004) respectively. Both are still
-about 0.11–0.12 below STRING (p_holm < 1e-4). Full tables: `results/final/main_measured/`.
+Same ranking. The best method here is `ridge__string` (0.356), with `knn__string` slightly behind
+(Δ = −0.025, p_holm = 0.015). scGPT (0.230) and Geneformer (0.221) with ridge beat the data-only PCA
+embedding (0.185), by +0.045 (p_holm = 5e-4) and +0.037 (p_holm = 0.004) respectively
+(`paired_tests_fm_vs_pca.csv`; Holm over the four FM methods). Both are still about 0.13 below STRING
+(p_holm < 1e-17). Full tables: `results/final/main_measured/`.
 
 ## Where, if anywhere, do foundation models help?
 
@@ -93,12 +98,12 @@ about 0.11–0.12 below STRING (p_holm < 1e-4). Full tables: `results/final/main
 Reference baseline: `knn__string`, the best method that doesn't use a foundation model, on 1,054 knockdowns.
 
 - **Overall, not at all.** Every scGPT and Geneformer variant is significantly below the reference on the
-  headline metric: Δ from −0.154 (`ridge__scgpt`) to −0.257 (`knn__geneformer`), all p_holm < 1e-10. The
+  headline metric: Δ from −0.155 (`ridge__scgpt`) to −0.258 (`knn__geneformer`), all p_holm < 1e-60. The
   same holds on `pearson_all`, `pearson_de` and `disc_rank`. Looking at individual knockdowns, an FM
-  variant beats the reference on only 19–25% of them (for comparison, `knn__go` does on 46%).
+  variant beats the reference on only 19–25% of them (for comparison, `knn__go` does on 45%).
 - **Not on any subgroup** (figure above; knockdowns split into tertiles, 95% CIs). The gap is smallest for
-  knockdowns with **weak effects** and those **least similar to any training knockdown**, but that's
-  because every method does poorly there, not because the FMs improve. All CIs stay below zero.
+  knockdowns with **weak effects** and those **least similar to any training knockdown**, where there
+  is the least signal for any method to capture; the FMs still don't catch up. All CIs stay below zero.
 - **Not on poorly annotated genes either.** A natural hope is that FMs compensate where curated knowledge
   is thin. Splitting by number of GO annotations, the FM gap is *largest* for the least-annotated
   tertile (−0.16 to −0.29) and smallest for the best-annotated one.
@@ -121,7 +126,13 @@ Reference baseline: `knn__string`, the best method that doesn't use a foundation
   `pearson_centered` together with `disc_rank`, which does penalise this. It also means `no_change`
   scores slightly above 0 (0.077): predicting "less than average" correlates with knockdowns that have
   weak effects.
-- **Noise ceiling** shares the control mean between the two halves, so it is slightly optimistic.
+- **Noise ceiling.** The raw split-half ceiling understates what is achievable (half samples are
+  noisier). Use `noise_ceiling_sb`, which corrects for this but assumes the two halves are parallel
+  measurements, and both halves share the control mean.
+- **Run-to-run variance.** Multi-threaded BLAS makes refits differ in the last digits, and when inner-CV
+  scores are near-tied this can flip the chosen hyperparameter. Between two identical runs, the
+  measured-run `ridge__string` score moved by 0.012. Differences smaller than ~0.02 shouldn't be
+  over-read.
 
 ## Reproduce
 
@@ -134,7 +145,7 @@ uv run pbench preprocess                  # ~15 s, peak ~4 GB RAM
 uv run pbench run configs/main.yaml       # ~6 min, peak ~3 GB RAM
 uv run pbench run configs/main_measured.yaml   # ~4 min
 uv run pbench report configs/main.yaml && uv run pbench report configs/main_measured.yaml
-uv run pytest -q                          # 54 tests, synthetic data, ~3 s
+uv run pytest -q                          # 58 tests, synthetic data, ~3 s
 ```
 
 If `gdown` hits a Google Drive quota, download scGPT's `whole_human` folder manually into
