@@ -1,0 +1,20 @@
+# Fine-tuning settings. Tutorial_Perturbation defaults unless noted; Task 7 (timing) may change
+# batch_size / grad_accum / epochs and records why.
+h5ad: data/raw/gears_k562/replogle_k562_essential/perturb_processed.h5ad
+ckpt_dir: data/raw/scgpt_human
+train:
+  epochs: 15
+  max_cells: 100        # spec: ≤100 cells per knockdown per epoch
+  batch_size: 64
+  grad_accum: 1
+  lr: 1.0e-4
+  gamma: 0.9
+  max_seq_len: 1536
+  patience: 5           # spec (tutorial: 10)
+  eval_batch_size: 64
+  pool_size: 300
+  pool_size_val: 100
+  val_frac: 0.1
+  seed: 0
+  amp: true
+  num_workers: 2
