@@ -109,7 +109,7 @@ class _Selected:
 class RidgeModel(_Selected):
     fixed = _FixedRidge
 
-    def __init__(self, alphas=(0.1, 1.0, 10.0, 100.0, 1e3, 1e4), inner_folds=5, seed=0):
+    def __init__(self, alphas=(0.1, 1.0, 10.0, 100.0, 1e3, 1e4, 1e5, 1e6), inner_folds=5, seed=0):
         super().__init__(inner_folds, seed)
         self.alphas = self.grid = tuple(alphas)
 

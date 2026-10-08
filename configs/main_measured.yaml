@@ -1,0 +1,9 @@
+# All 7 embeddings, restricted to knockdowns whose target gene is among the measured genes
+# (required by the PCA embedding).
+data: data/processed/k562_essential.npz
+raw_dir: data/raw
+out_dir: results/main_measured
+embeddings: [random, pca, go, string, genept, scgpt, geneformer]
+models: [ridge, knn]
+n_folds: 5
+seed: 0
