@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import matplotlib
@@ -14,7 +15,7 @@ import pandas as pd  # noqa: E402
 from pbench.data import PerturbData  # noqa: E402
 from pbench.embeddings import FM_EMBEDDINGS  # noqa: E402
 from pbench.metrics import METRICS  # noqa: E402
-from pbench.stats import bootstrap_ci, paired_tests, summarize  # noqa: E402
+from pbench.stats import bootstrap_ci, holm, paired_tests, summarize  # noqa: E402
 
 HEADLINE = "pearson_centered"
 
@@ -116,6 +117,30 @@ def _breakdown_plot(bd: pd.DataFrame, path: Path) -> None:
     plt.close(fig)
 
 
+def finetune_extras(df: pd.DataFrame, run: Path, final: Path) -> None:
+    """Phase 2 outputs: fine-tuned vs static scGPT embedding, and the GEARS-split sanity gate."""
+    from pbench.external import FINETUNE_METHOD
+
+    methods = set(df.method)
+    if FINETUNE_METHOD in methods:
+        rows = [paired_tests(df[df.method.isin([FINETUNE_METHOD, static])], m, static)
+                for static in ("ridge__scgpt", "knn__scgpt") if static in methods
+                for m in METRICS]
+        if rows:
+            ft = pd.concat(rows, ignore_index=True)
+            ft["p_holm"] = holm(ft["p"].to_numpy())
+            ft.to_csv(final / "paired_tests_finetune_vs_static.csv", index=False)
+    gears = run / "metrics_gears_sim.parquet"
+    if gears.exists():
+        g = pd.read_parquet(gears)
+        parts = [f"### view: {v}\n\n{_summary_markdown(summarize(g[g.view == v]))}\n"
+                 for v in sorted(g.view.unique())]
+        (final / "gears_sim.md").write_text("\n".join(parts))
+    for name in ("gate.json", "diagnostics.json"):
+        if (run / name).exists():
+            shutil.copy(run / name, final / name)
+
+
 def make_report(cfg) -> None:
     from pbench.download import RESOURCE_PATHS
     from pbench.embeddings.knowledge import go_annotation_counts
@@ -148,4 +173,5 @@ def make_report(cfg) -> None:
     bd.to_csv(final / "breakdown.csv", index=False)
     if len(bd):
         _breakdown_plot(bd, final / "breakdown.png")
+    finetune_extras(df, run, final)
     print(f"[report] reference baseline: {ref}; wrote {final}")
