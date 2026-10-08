@@ -1,0 +1,17 @@
+# Isolated env for Phase 2 (scGPT fine-tuning). Shares no imports with pbench.
+name: pbench-phase2
+channels: [conda-forge]
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu121
+      - torch==2.1.2
+      - torchtext==0.16.2
+      - numpy<2
+      - scgpt==0.2.4
+      - cell-gears==0.0.2
+      - torch_geometric==2.4.0
+      - ipython           # imported by scgpt.utils but not declared by scgpt
+      - pyyaml
+      - pytest
