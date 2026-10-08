@@ -1,0 +1,8 @@
+data: data/processed/k562_essential.npz
+raw_dir: data/raw
+out_dir: results/quick
+embeddings: [random, pca, go]
+models: [ridge, knn]
+n_folds: 5
+seed: 0
+folds: [0]

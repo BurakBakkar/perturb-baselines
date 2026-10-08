@@ -1,0 +1,9 @@
+# All embeddings that cover (almost) every knockdown target. PCA is excluded because it can only
+# embed the ~38% of targets that are among the 5,000 measured genes; see main_measured.yaml.
+data: data/processed/k562_essential.npz
+raw_dir: data/raw
+out_dir: results/main
+embeddings: [random, go, string, genept, scgpt, geneformer]
+models: [ridge, knn]
+n_folds: 5
+seed: 0

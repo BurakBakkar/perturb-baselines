@@ -1,0 +1,31 @@
+{
+  "n_cells_total": 162751,
+  "n_control_cells": 10691,
+  "n_genes": 5000,
+  "n_perts": 1092,
+  "n_dropped_few_cells": 0,
+  "n_dropped_combo": 0,
+  "main": {
+    "fair_set_size": 1054,
+    "not_covered_by_source": {
+      "random": 0,
+      "go": 31,
+      "string": 21,
+      "genept": 6,
+      "scgpt": 19,
+      "geneformer": 24
+    }
+  },
+  "main_measured": {
+    "fair_set_size": 395,
+    "not_covered_by_source": {
+      "random": 0,
+      "pca": 680,
+      "go": 31,
+      "string": 21,
+      "genept": 6,
+      "scgpt": 19,
+      "geneformer": 24
+    }
+  }
+}

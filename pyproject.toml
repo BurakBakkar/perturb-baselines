@@ -1,0 +1,38 @@
+[project]
+name = "pbench"
+version = "0.1.0"
+description = "Baselines vs single-cell foundation models for unseen genetic perturbation prediction"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.1",
+  "scipy>=1.11",
+  "scikit-learn>=1.4",
+  "anndata>=0.10",
+  "pyyaml>=6.0",
+  "pyarrow>=15",
+  "matplotlib>=3.8",
+  "tabulate>=0.9",
+]
+
+[project.optional-dependencies]
+fm = ["torch>=2.2", "safetensors>=0.4", "huggingface_hub>=0.23", "gdown>=5.1"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+pbench = "pbench.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pbench"]
+
+[tool.ruff]
+line-length = 100
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
