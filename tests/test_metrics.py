@@ -1,7 +1,10 @@
 import numpy as np
 
 from pbench.metrics import (
-    METRICS, discrimination_rank, per_pert_metrics, rowwise_pearson,
+    METRICS,
+    discrimination_rank,
+    per_pert_metrics,
+    rowwise_pearson,
 )
 
 
