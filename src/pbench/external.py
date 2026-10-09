@@ -82,6 +82,9 @@ def score_cv(cfg: ExternalConfig, data: PerturbData) -> pd.DataFrame:
     data = data.subset(keep)
     base = pd.read_parquet(cfg.baseline_run / "metrics.parquet")
     base = base[base.fold.isin(cfg.cv_folds)]
+    missing = sorted(set(cfg.cv_folds) - set(base.fold))
+    if missing:
+        raise ValueError(f"no baseline rows for fold(s) {missing} in {cfg.baseline_run}")
     expected = kfold_splits(keep, cfg.n_folds, cfg.seed)
     frames = [base]
     for k in cfg.cv_folds:
@@ -157,11 +160,20 @@ def score_external(cfg: ExternalConfig) -> pd.DataFrame:
     data = PerturbData.load(cfg.data)
     out = Path(cfg.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    if (cfg.splits_dir / "gears_sim.json").exists():
+    gears_preds = [cfg.preds_dir / "gears_sim" / v / f"{FINETUNE_METHOD}.npz"
+                   for v in ("all", "measured")]
+    if not (cfg.splits_dir / "gears_sim.json").exists():
+        print("[score-external] no GEARS split; skipping the sanity gate", flush=True)
+    elif not all(p.exists() for p in gears_preds):
+        print("[score-external] GEARS predictions missing; skipping the sanity gate", flush=True)
+    else:
         gdf, gate = score_gears(cfg, data)
         gdf.to_parquet(out / "metrics_gears_sim.parquet")
         (out / "gate.json").write_text(json.dumps(gate, indent=2))
         print(f"[score-external] GEARS gate: {json.dumps(gate)}", flush=True)
+        if not gate["passed"]:
+            print("[score-external] WARNING: SANITY GATE FAILED (see gate.json). Do not report CV "
+                  "results until this is explained (spec §7).", flush=True)
     if not all((cfg.splits_dir / f"fold{k}.json").exists() for k in cfg.cv_folds):
         print("[score-external] CV splits not exported yet; skipping CV scoring", flush=True)
         return pd.DataFrame()

@@ -168,3 +168,49 @@ def test_score_external_writes_target_gene_diagnostic(tmp_path, setup):
     assert set(tg.fold) == {0, 1}
     ft = tg[tg.method == FINETUNE_METHOD]
     assert np.allclose(ft.pred_target, ft.obs_target)
+
+
+def test_score_external_skips_gears_without_predictions(tmp_path, setup, capsys):
+    from pbench.external import score_external
+
+    data, data_path, run = setup
+    cfg = _cfg(tmp_path, data_path, run)
+    _gears_split(cfg, data)  # split exists, but no GEARS predictions yet
+    export_splits(run, 5, 0, [0, 1], cfg.splits_dir)
+    for k in (0, 1):
+        test = json.loads((cfg.splits_dir / f"fold{k}.json").read_text())["test"]
+        save_preds(cfg.preds_dir / "cv" / f"fold{k}" / f"{FINETUNE_METHOD}.npz",
+                   test, data.genes, data.subset(test).delta)
+    df = score_external(cfg)
+    assert FINETUNE_METHOD in set(df.method)
+    assert not (cfg.out_dir / "gate.json").exists()
+    assert "GEARS predictions missing" in capsys.readouterr().out
+
+
+def test_score_external_warns_when_gate_fails(tmp_path, setup, capsys):
+    from pbench.external import score_external
+
+    data, data_path, run = setup
+    cfg = _cfg(tmp_path, data_path, run)
+    split = _gears_split(cfg, data)
+    for view, key in (("all", "test"), ("measured", "test_measured")):
+        save_preds(cfg.preds_dir / "gears_sim" / view / f"{FINETUNE_METHOD}.npz",
+                   split[key], data.genes, data.subset(split[key]).delta)  # perfect: fails gate
+    score_external(cfg)
+    assert json.loads((cfg.out_dir / "gate.json").read_text())["passed"] is False
+    assert "SANITY GATE FAILED" in capsys.readouterr().out
+
+
+def test_score_cv_requires_baseline_rows_for_every_fold(tmp_path):
+    data, _ = make_synthetic()
+    data_path = tmp_path / "data.npz"
+    data.save(data_path)
+    run = _baseline_run(tmp_path, data, folds=(0,))  # baseline has fold 0 only
+    cfg = _cfg(tmp_path, data_path, run)
+    export_splits(run, 5, 0, [0, 1], cfg.splits_dir)
+    for k in (0, 1):
+        test = json.loads((cfg.splits_dir / f"fold{k}.json").read_text())["test"]
+        save_preds(cfg.preds_dir / "cv" / f"fold{k}" / f"{FINETUNE_METHOD}.npz",
+                   test, data.genes, data.subset(test).delta)
+    with pytest.raises(ValueError, match="no baseline rows for fold"):
+        score_cv(cfg, data)
