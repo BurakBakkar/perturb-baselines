@@ -136,6 +136,13 @@ def finetune_extras(df: pd.DataFrame, run: Path, final: Path) -> None:
         parts = [f"### view: {v}\n\n{_summary_markdown(summarize(g[g.view == v]))}\n"
                  for v in sorted(g.view.unique())]
         (final / "gears_sim.md").write_text("\n".join(parts))
+    tg = run / "target_gene.parquet"
+    if tg.exists():  # how much of each method's pearson_de is the knocked-down gene itself
+        t = pd.read_parquet(tg)
+        cols = ["pred_target", "obs_target", "pearson_de_offtarget"]
+        summary = t.groupby("method")[cols].mean().assign(n=t.groupby("method").size())
+        summary = summary.sort_values("pearson_de_offtarget", ascending=False)
+        summary.to_csv(final / "target_gene.csv")
     for name in ("gate.json", "diagnostics.json"):
         if (run / name).exists():
             shutil.copy(run / name, final / name)

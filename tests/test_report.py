@@ -98,3 +98,16 @@ def test_finetune_extras_noop_without_finetune(tmp_path):
 
     finetune_extras(_df(), tmp_path, tmp_path)
     assert not (tmp_path / "paired_tests_finetune_vs_static.csv").exists()
+
+
+def test_finetune_extras_summarizes_target_gene(tmp_path):
+    from pbench.report import finetune_extras
+
+    tg = pd.DataFrame({"method": ["a", "a", "b"], "fold": [0, 1, 0], "pert": ["P", "Q", "P"],
+                       "pred_target": [-1.0, -0.5, 0.0], "obs_target": [-1.0, -1.0, -1.0],
+                       "pearson_de_offtarget": [0.2, 0.4, 0.6]})
+    tg.to_parquet(tmp_path / "target_gene.parquet")
+    finetune_extras(_df(), tmp_path, tmp_path)
+    out = pd.read_csv(tmp_path / "target_gene.csv").set_index("method")
+    assert out.loc["a", "pred_target"] == -0.75 and out.loc["a", "pearson_de_offtarget"] == 0.3
+    assert out.loc["a", "n"] == 2

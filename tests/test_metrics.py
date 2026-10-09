@@ -57,3 +57,30 @@ def test_rowwise_pearson_matches_numpy():
 
 def test_rank_single_row_is_nan():
     assert np.isnan(discrimination_rank(np.ones((1, 3)), np.ones((1, 3)))).all()
+
+
+def test_target_gene_metrics():
+    from pbench.metrics import target_gene_metrics
+
+    rng = np.random.default_rng(0)
+    genes = np.array([f"G{i}" for i in range(30)])
+    perts = ["G1", "G5", "G9"]
+    obs = rng.normal(size=(3, 30))
+    for i, p in enumerate(perts):
+        obs[i, int(p[1:])] = -3.0  # the knocked-down gene is its own strongest DE gene
+    de_idx = np.argsort(-np.abs(obs), axis=1)[:, :8]
+    pred = obs.copy()
+    for i, p in enumerate(perts):
+        pred[i, int(p[1:])] = 0.0  # right everywhere except at the target
+    m = target_gene_metrics(pred, obs, de_idx, perts, genes)
+    assert list(m.columns) == ["pred_target", "obs_target", "pearson_de_offtarget"]
+    assert np.allclose(m.pred_target, 0.0) and np.allclose(m.obs_target, -3.0)
+    assert np.allclose(m.pearson_de_offtarget, 1.0)
+
+
+def test_target_gene_metrics_unmeasured_target_is_nan():
+    from pbench.metrics import target_gene_metrics
+
+    obs = np.random.default_rng(1).normal(size=(1, 10))
+    m = target_gene_metrics(obs, obs, np.arange(5)[None, :], ["NOPE"], np.array(list("abcdefghij")))
+    assert np.isnan(m.pred_target[0]) and np.isclose(m.pearson_de_offtarget[0], 1.0)

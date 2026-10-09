@@ -16,7 +16,7 @@ import yaml
 
 from pbench.data import PerturbData
 from pbench.evaluate import evaluate_fold
-from pbench.metrics import rowwise_pearson
+from pbench.metrics import rowwise_pearson, target_gene_metrics
 from pbench.models import NoChange, TrainMean
 from pbench.preds import load_preds, save_preds
 from pbench.splits import kfold_splits
@@ -136,6 +136,23 @@ def score_gears(cfg: ExternalConfig, data: PerturbData) -> tuple[pd.DataFrame, d
     return pd.concat(frames, ignore_index=True), gate
 
 
+def target_gene_table(cfg: ExternalConfig, data: PerturbData) -> pd.DataFrame:
+    """target_gene_metrics for every method (baselines and external) on the CV folds."""
+    frames = []
+    for k in cfg.cv_folds:
+        dirs = [cfg.baseline_run / "preds" / "cv" / f"fold{k}", cfg.preds_dir / "cv" / f"fold{k}"]
+        for path in sorted(p for d in dirs for p in d.glob("*.npz")):
+            preds = load_preds(path)
+            obs = data.subset(preds.perts.tolist())
+            m = target_gene_metrics(preds.delta_pred, obs.delta, obs.de_idx,
+                                    preds.perts.tolist(), data.genes)
+            m.insert(0, "pert", preds.perts.tolist())
+            m.insert(0, "fold", k)
+            m.insert(0, "method", path.stem)
+            frames.append(m)
+    return pd.concat(frames, ignore_index=True)
+
+
 def score_external(cfg: ExternalConfig) -> pd.DataFrame:
     data = PerturbData.load(cfg.data)
     out = Path(cfg.out_dir)
@@ -154,6 +171,7 @@ def score_external(cfg: ExternalConfig) -> pd.DataFrame:
     df = score_cv(cfg, data)
     df.to_parquet(out / "metrics.parquet")
     shutil.copy(cfg.baseline_run / "fair_set.json", out / "fair_set.json")
+    target_gene_table(cfg, data).to_parquet(out / "target_gene.parquet")
     diag = {}
     for k in cfg.cv_folds:
         p = load_preds(cfg.preds_dir / "cv" / f"fold{k}" / f"{FINETUNE_METHOD}.npz")

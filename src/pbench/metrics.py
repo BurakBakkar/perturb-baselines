@@ -51,3 +51,26 @@ def per_pert_metrics(pred, obs, de_idx, train_mean) -> pd.DataFrame:
         "pearson_centered": rowwise_pearson(pred - m, obs - m),
         "disc_rank": discrimination_rank(pred, obs),
     })
+
+
+def target_gene_metrics(pred, obs, de_idx, perts, genes) -> pd.DataFrame:
+    """What a method predicts for the knocked-down gene itself, and pearson_de without it.
+
+    scGPT's perturbation model sees which input gene is perturbed, so it can learn to lower that
+    gene; gene-embedding baselines cannot. Separating the target from the other DE genes shows how
+    much of a pearson_de score is just the knockdown itself. NaN target values when the target is
+    not a measured gene.
+    """
+    pred = np.asarray(pred, np.float64)
+    obs = np.asarray(obs, np.float64)
+    pos = {g: i for i, g in enumerate(np.asarray(genes).tolist())}
+    rows = []
+    for i, p in enumerate(perts):
+        t = pos.get(p)
+        idx = np.array([j for j in de_idx[i] if j != t])
+        rows.append({
+            "pred_target": pred[i, t] if t is not None else np.nan,
+            "obs_target": obs[i, t] if t is not None else np.nan,
+            "pearson_de_offtarget": rowwise_pearson(pred[i, idx][None], obs[i, idx][None])[0],
+        })
+    return pd.DataFrame(rows)

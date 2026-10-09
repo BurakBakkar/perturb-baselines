@@ -30,7 +30,7 @@ def _baseline_run(tmp_path, data, n_folds=5, seed=0, folds=(0, 1)):
     for k, (train, test) in enumerate(kfold_splits(keep, n_folds, seed)):
         if k not in folds:
             continue
-        d = run / "preds" / f"fold{k}"
+        d = run / "preds" / "cv" / f"fold{k}"
         tm = TrainMean().fit(None, data.subset(train).delta).predict(np.zeros((len(test), 0)))
         save_preds(d / "train_mean.npz", test, data.genes, tm)
         frames.append(evaluate_fold(data, train, test, d, k))
@@ -150,3 +150,21 @@ def test_load_config_dispatches(tmp_path):
     assert isinstance(load_config(p), ExternalConfig)
     p.write_text("data: d.npz\nraw_dir: r\nout_dir: o\nembeddings: [random]\nmodels: [ridge]\n")
     assert type(load_config(p)).__name__ == "Config"
+
+
+def test_score_external_writes_target_gene_diagnostic(tmp_path, setup):
+    from pbench.external import score_external
+
+    data, data_path, run = setup
+    cfg = _cfg(tmp_path, data_path, run)
+    export_splits(run, 5, 0, [0, 1], cfg.splits_dir)
+    for k in (0, 1):
+        test = json.loads((cfg.splits_dir / f"fold{k}.json").read_text())["test"]
+        save_preds(cfg.preds_dir / "cv" / f"fold{k}" / f"{FINETUNE_METHOD}.npz",
+                   test, data.genes, data.subset(test).delta)
+    score_external(cfg)
+    tg = pd.read_parquet(cfg.out_dir / "target_gene.parquet")
+    assert {FINETUNE_METHOD, "train_mean"} == set(tg.method)
+    assert set(tg.fold) == {0, 1}
+    ft = tg[tg.method == FINETUNE_METHOD]
+    assert np.allclose(ft.pred_target, ft.obs_target)
