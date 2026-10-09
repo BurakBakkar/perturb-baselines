@@ -139,7 +139,10 @@ the 1,000 most expressed genes, 104 measured test knockdowns):
 | mean baseline (`train_mean`) | 0.377 | 0.398 / 0.410 |
 | fine-tuned scGPT | 0.370 | 0.290 / 0.344 |
 
-Our run is in the published range: fine-tuned scGPT lands at or below the mean baseline in both.
+Our run passes the pre-registered check: `train_mean` is within 0.05 of theirs, and our scGPT (0.370)
+is within the tolerance band [0.24, 0.39] around their two runs. It is slightly *above* both published
+values, plausibly because we pick the epoch by validation Pearson Δ. In both runs, fine-tuned scGPT
+lands at or below the mean baseline.
 
 ### Results (folds 0–1, 158 knockdowns)
 
@@ -181,10 +184,16 @@ Full table: `results/final/phase2/summary.md`.
   gene, fine-tuned scGPT is below even the mean baseline. So in this setup the "perturbation model"
   learns the CRISPRi knockdown it was given as input, plus an average response. It does not learn how
   the knockdown propagates to other genes.
-- **Why the frozen embeddings do better:** ridge and kNN on scGPT's gene embeddings learn a direct map
-  from "which gene" to "which response". They borrow from training knockdowns whose targets have
-  similar embeddings. The fine-tuned model must route the same information through a single flag
-  token in a 1,536-gene context, and ~300 training knockdowns are too few for that.
+- **Why might the frozen embeddings do better?** These are hypotheses; we didn't test them.
+  - Ridge and kNN on scGPT's gene embeddings learn a direct map from "which gene" to "which response",
+    borrowing from training knockdowns whose targets have similar embeddings. The fine-tuned model has
+    to route the same information through a single flag token, and ~300 training knockdowns may be
+    too few for that.
+  - The official recipe also feeds each training batch a random 1,536 of the 5,000 genes. So the
+    flagged gene is in the input only ~31% of the time, yet the model is still trained toward the
+    perturbed cell. That pushes it toward "average response, plus lower the flagged gene when you see
+    it", which is the pattern we observe. A recipe that always keeps the flagged gene in the input
+    might do better; we kept the official one.
 
 **Caveats specific to Phase 2.**
 - Two of the five folds, one seed per fold, so the CIs are wider than Phase 1's.
@@ -193,6 +202,8 @@ Full table: `results/final/phase2/summary.md`.
   (best epoch 3); fold 1 ran all 15 (best epoch 13).
 - Validation picks the epoch by Pearson Δ, a model-selection choice the tutorial makes differently
   (`phase2/README.md`).
+- The official recipe samples 1,536 of 5,000 genes per training batch, so the flagged gene is absent
+  from ~69% of training inputs (see above).
 - The gap to the baselines is large relative to all of these, and it agrees with the published run
   above.
 
