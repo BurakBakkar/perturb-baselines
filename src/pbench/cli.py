@@ -21,6 +21,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     rep = sub.add_parser("report", help="build tables and figures for a finished run")
     rep.add_argument("config")
+
+    ex = sub.add_parser("export-splits", help="write a finished run's fold lists for Phase 2")
+    ex.add_argument("config")
+    ex.add_argument("--folds", nargs="+", type=int, default=[0, 1])
+    ex.add_argument("--out", default="results/phase2/splits")
+
+    se = sub.add_parser("score-external", help="score Phase 2 predictions with pbench.evaluate")
+    se.add_argument("config")
     return p
 
 
@@ -39,8 +47,19 @@ def main(argv: list[str] | None = None) -> int:
 
         run_experiment(Config.from_yaml(args.config))
     elif args.cmd == "report":
+        from pbench.external import load_config
         from pbench.report import make_report
+
+        make_report(load_config(args.config))
+    elif args.cmd == "export-splits":
+        from pbench.external import export_splits
         from pbench.run import Config
 
-        make_report(Config.from_yaml(args.config))
+        cfg = Config.from_yaml(args.config)
+        for p in export_splits(cfg.out_dir, cfg.n_folds, cfg.seed, args.folds, args.out):
+            print(f"[export-splits] wrote {p}")
+    elif args.cmd == "score-external":
+        from pbench.external import load_config, score_external
+
+        score_external(load_config(args.config))
     return 0

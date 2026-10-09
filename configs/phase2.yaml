@@ -1,0 +1,18 @@
+# Phase 2: scGPT fine-tuned outside pbench (phase2/), scored here against the measured-set baselines.
+data: data/processed/k562_essential.npz
+raw_dir: data/raw
+out_dir: results/phase2
+baseline_run: results/main_measured
+splits_dir: results/phase2/splits
+preds_dir: results/phase2/preds
+cv_folds: [0, 1]
+n_folds: 5
+seed: 0
+# Sanity gate: Ahlmann-Eltze et al. 2025, Pearson Δ on the 1,000 most expressed genes,
+# Replogle K562 essential, GEARS-style split, test perturbations (seeds 1/2).
+gate:
+  mean_ref: 0.404
+  scgpt_lo: 0.290
+  scgpt_hi: 0.344
+  tol: 0.05
+  source: "github.com/const-ae/linear_perturbation_prediction-Paper source_data/suppl-pearson_delta_performance_single_pert.xlsx, Panel A"

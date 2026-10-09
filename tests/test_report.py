@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -58,3 +60,54 @@ def test_fm_vs_reference_tests_only_fm_methods():
                 "ridge__pca")
     assert out["method"].tolist() == ["ridge__scgpt"]
     assert out["mean_diff"].item() > 0
+
+
+def test_finetune_extras(tmp_path):
+    from pbench.report import finetune_extras
+
+    rng = np.random.default_rng(0)
+    rows = []
+    for m, shift in (("finetune__scgpt", 0.1), ("ridge__scgpt", 0.05), ("knn__scgpt", 0.0)):
+        for fold in (0, 1):
+            for i in range(20):
+                base = rng.normal(0.3, 0.05)
+                rows.append({"method": m, "fold": fold, "pert": f"P{fold}_{i}",
+                             "pearson_all": base + shift, "pearson_de": base + shift,
+                             "pearson_centered": base + shift, "disc_rank": 0.3 - shift})
+    df = pd.DataFrame(rows)
+    run, final = tmp_path / "run", tmp_path / "final"
+    run.mkdir()
+    final.mkdir()
+    g = df[df.method.isin(["finetune__scgpt", "ridge__scgpt"])]
+    pd.concat([g.assign(view="all"), g.assign(view="measured")]).to_parquet(
+        run / "metrics_gears_sim.parquet")
+    (run / "gate.json").write_text(json.dumps({"passed": True}))
+
+    finetune_extras(df, run, final)
+
+    ft = pd.read_csv(final / "paired_tests_finetune_vs_static.csv")
+    assert set(ft.reference) == {"ridge__scgpt", "knn__scgpt"} and len(ft) == 8
+    assert (ft[ft.metric == "pearson_centered"].mean_diff > 0).all()
+    assert "p_holm" in ft.columns
+    assert "view: measured" in (final / "gears_sim.md").read_text()
+    assert json.loads((final / "gate.json").read_text()) == {"passed": True}
+
+
+def test_finetune_extras_noop_without_finetune(tmp_path):
+    from pbench.report import finetune_extras
+
+    finetune_extras(_df(), tmp_path, tmp_path)
+    assert not (tmp_path / "paired_tests_finetune_vs_static.csv").exists()
+
+
+def test_finetune_extras_summarizes_target_gene(tmp_path):
+    from pbench.report import finetune_extras
+
+    tg = pd.DataFrame({"method": ["a", "a", "b"], "fold": [0, 1, 0], "pert": ["P", "Q", "P"],
+                       "pred_target": [-1.0, -0.5, 0.0], "obs_target": [-1.0, -1.0, -1.0],
+                       "pearson_de_offtarget": [0.2, 0.4, 0.6]})
+    tg.to_parquet(tmp_path / "target_gene.parquet")
+    finetune_extras(_df(), tmp_path, tmp_path)
+    out = pd.read_csv(tmp_path / "target_gene.csv").set_index("method")
+    assert out.loc["a", "pred_target"] == -0.75 and out.loc["a", "pearson_de_offtarget"] == 0.3
+    assert out.loc["a", "n"] == 2

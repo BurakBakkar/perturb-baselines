@@ -1,0 +1,23 @@
+# Fine-tuning settings. Tutorial_Perturbation defaults unless noted.
+# Timing test (fold 0, RTX 4090 Laptop 16 GB): batch 64 does not fit, so 32 x 2 accumulation keeps the
+# tutorial's effective batch of 64. 0.41 s/step, peak 9.1 GB; 7.6 s per predicted knockdown
+# (300 cells x 5,000 genes). Estimates: ~1.8 h per CV fold, ~5 h for the GEARS split at 15 epochs,
+# so epochs are not cut.
+h5ad: data/raw/gears_k562/replogle_k562_essential/perturb_processed.h5ad
+ckpt_dir: data/raw/scgpt_human
+train:
+  epochs: 15
+  max_cells: 100        # spec: ≤100 cells per knockdown per epoch
+  batch_size: 32        # tutorial: 64 (see above)
+  grad_accum: 2         # effective batch 64
+  lr: 1.0e-4
+  gamma: 0.9
+  max_seq_len: 1536
+  patience: 5           # spec (tutorial: 10)
+  eval_batch_size: 64
+  pool_size: 300
+  pool_size_val: 100
+  val_frac: 0.1
+  seed: 0
+  amp: true
+  num_workers: 2
