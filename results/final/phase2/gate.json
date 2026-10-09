@@ -1,0 +1,18 @@
+{
+  "metric": "pearson_delta_top1000_expressed",
+  "reference": {
+    "mean_ref": 0.404,
+    "scgpt_lo": 0.29,
+    "scgpt_hi": 0.344,
+    "tol": 0.05,
+    "source": "github.com/const-ae/linear_perturbation_prediction-Paper source_data/suppl-pearson_delta_performance_single_pert.xlsx, Panel A"
+  },
+  "n_test_measured": 104,
+  "finetune__scgpt": 0.36994194936026403,
+  "train_mean": 0.37704435573900896,
+  "flag_diagnostic": 0.8872981757037459,
+  "calibration_ok": true,
+  "scgpt_ok": true,
+  "flag_ok": true,
+  "passed": true
+}

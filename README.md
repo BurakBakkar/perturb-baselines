@@ -11,6 +11,10 @@ an embedding learned from the screen itself (PCA), but they are significantly *w
 prior knowledge (the STRING protein network and GO annotations) and than GenePT, a text embedding of
 NCBI gene summaries. They don't win on any subgroup of knockdowns we looked at.
 
+**Fine-tuning doesn't change that (Phase 2).** scGPT fine-tuned end to end with its official perturbation
+recipe does *worse* on knockdown-specific signal than ridge regression on its own frozen embeddings.
+The one thing it learns well is to lower the expression of the gene it is told was knocked down.
+
 ## Setup
 
 **Data.** Replogle et al. 2022 K562 essential screen, GEARS-preprocessed release: 162,751 cells,
@@ -112,13 +116,92 @@ Reference baseline: `knn__string`, the best method that doesn't use a foundation
   descriptions (GenePT) is better than both FMs, which suggests the useful part of a gene representation
   here is literature-level functional knowledge, which STRING and GO encode more directly.
 
+## Phase 2: does fine-tuning scGPT help?
+
+Phase 1 used frozen gene embeddings. scGPT also ships a perturbation model meant to be fine-tuned end to
+end. It reads a control cell's expression, together with a flag marking which input gene is knocked
+down, and predicts the perturbed cell. We fine-tuned it with the official recipe (`Tutorial_Perturbation`,
+whole-human checkpoint) in a separate environment (`phase2/`). It wrote the same predictions files and
+was scored by the same evaluator, on the **same held-out knockdowns** as the baselines.
+`phase2/README.md` has the details and the small deviations needed to fit a 16 GB GPU, none of which
+changes the maths.
+
+**Scope.** scGPT can only flag a knockdown whose target is one of its 5,000 input genes, so Phase 2 uses
+the 395-knockdown measured set. It covers CV folds 0 and 1 (158 held-out knockdowns), with one seed
+per fold. Each fold took 1–2 h on the laptop GPU.
+
+**Sanity check first.** Before comparing anything, we reproduced a published scGPT run. Ahlmann-Eltze
+et al. (2025) fine-tuned scGPT on this dataset with the GEARS split. On the same metric (Pearson Δ over
+the 1,000 most expressed genes, 104 measured test knockdowns):
+
+| | ours | Ahlmann-Eltze et al. (seeds 1 / 2) |
+|---|---|---|
+| mean baseline (`train_mean`) | 0.377 | 0.398 / 0.410 |
+| fine-tuned scGPT | 0.370 | 0.290 / 0.344 |
+
+Our run is in the published range: fine-tuned scGPT lands at or below the mean baseline in both.
+
+### Results (folds 0–1, 158 knockdowns)
+
+| method | pearson_all | pearson_de | pearson_centered | disc_rank |
+|:--|:--|:--|:--|:--|
+| noise_ceiling_sb | 0.834 [0.816, 0.852] | 0.991 [0.988, 0.993] | 0.818 [0.799, 0.835] | – |
+| ridge__string (best baseline) | 0.522 [0.488, 0.558] | 0.575 [0.521, 0.624] | **0.363** [0.319, 0.404] | 0.332 [0.285, 0.380] |
+| ridge__go | 0.478 [0.447, 0.509] | 0.518 [0.471, 0.565] | 0.317 [0.274, 0.359] | 0.463 [0.418, 0.517] |
+| ridge__scgpt (frozen embedding) | 0.463 [0.431, 0.495] | 0.498 [0.446, 0.549] | 0.247 [0.213, 0.282] | 0.471 [0.424, 0.522] |
+| knn__scgpt (frozen embedding) | 0.466 [0.435, 0.498] | 0.507 [0.452, 0.560] | 0.212 [0.171, 0.254] | 0.412 [0.361, 0.465] |
+| ridge__pca | 0.432 [0.402, 0.461] | 0.469 [0.416, 0.519] | 0.177 [0.141, 0.216] | 0.498 [0.454, 0.549] |
+| **finetune__scgpt** | 0.373 [0.350, 0.396] | 0.584 [0.545, 0.621] | 0.086 [0.068, 0.105] | 0.479 [0.433, 0.529] |
+| train_mean | 0.426 [0.397, 0.454] | 0.464 [0.411, 0.515] | 0.000 | 0.500 [0.456, 0.552] |
+
+Full table: `results/final/phase2/summary.md`.
+
+![Phase 2 heatmap](results/final/phase2/heatmap.png)
+
+- **Fine-tuning makes scGPT worse.**
+  - On the headline metric, fine-tuned scGPT (0.086) is far below ridge on scGPT's *frozen* embeddings
+    (−0.16, p_holm < 1e-10).
+  - It is also below the data-only PCA embedding (−0.09) and the best baseline (−0.28).
+  - Its `pearson_all` is below `train_mean`, and its `disc_rank` (0.48) is close to chance.
+  - It doesn't catch up in any subgroup: across all tertiles of effect size, similarity to training
+    knockdowns and GO annotation count, its gap to the best baseline stays between −0.17 and −0.45
+    (`results/final/phase2/breakdown.csv`).
+- **Its one apparent strength is the knocked-down gene itself.** On `pearson_de` it ties the best
+  baseline (0.584 vs 0.575, p = 0.65). Splitting the knocked-down gene out of its own DE set shows
+  why (`results/final/phase2/target_gene.csv`):
+
+  | | predicted Δ of the target gene (observed −0.75) | pearson_de on the other DE genes |
+  |---|---|---|
+  | finetune__scgpt | **−0.73** | 0.460 |
+  | ridge__string | −0.02 | **0.667** |
+  | train_mean | −0.02 | 0.515 |
+
+  The fine-tuned model reproduces the knockdown of the flagged gene almost exactly. No embedding
+  baseline can do this, because nothing marks the target's position in its input. On every other DE
+  gene, fine-tuned scGPT is below even the mean baseline. So in this setup the "perturbation model"
+  learns the CRISPRi knockdown it was given as input, plus an average response. It does not learn how
+  the knockdown propagates to other genes.
+- **Why the frozen embeddings do better:** ridge and kNN on scGPT's gene embeddings learn a direct map
+  from "which gene" to "which response". They borrow from training knockdowns whose targets have
+  similar embeddings. The fine-tuned model must route the same information through a single flag
+  token in a 1,536-gene context, and ~300 training knockdowns are too few for that.
+
+**Caveats specific to Phase 2.**
+- Two of the five folds, one seed per fold, so the CIs are wider than Phase 1's.
+- Measured targets only.
+- A per-knockdown cap of 100 cells per epoch, and at most 15 epochs. Fold 0 stopped early at epoch 8
+  (best epoch 3); fold 1 ran all 15 (best epoch 13).
+- Validation picks the epoch by Pearson Δ, a model-selection choice the tutorial makes differently
+  (`phase2/README.md`).
+- The gap to the baselines is large relative to all of these, and it agrees with the published run
+  above.
+
 ## Caveats
 
 - **One cell line, one screen.** K562 essential genes are well studied and strongly connected in STRING,
   which favours knowledge-graph embeddings. Replicating on RPE1 is the obvious next check.
-- **Static FM embeddings.** We use each model's input gene-token embeddings, not context-dependent
-  embeddings computed from K562 cells, and we don't fine-tune. Phase 2 (fine-tuning scGPT's perturbation
-  head and scoring it with the same evaluator) tests whether end-to-end training changes the picture.
+- **Static FM embeddings.** Phase 1 uses each model's input gene-token embeddings, not context-dependent
+  embeddings computed from K562 cells. Fine-tuning scGPT end to end (Phase 2, above) did not help.
 - **STRING includes co-expression evidence** from public expression data. That's prior knowledge, not
   leakage from this screen, but it partly explains STRING's strength.
 - **The headline metric is scale-invariant.** It ignores prediction magnitude, so inner CV often picks very
@@ -145,7 +228,18 @@ uv run pbench preprocess                  # ~15 s, peak ~4 GB RAM
 uv run pbench run configs/main.yaml       # ~6 min, peak ~3 GB RAM
 uv run pbench run configs/main_measured.yaml   # ~4 min
 uv run pbench report configs/main.yaml && uv run pbench report configs/main_measured.yaml
-uv run pytest -q                          # 58 tests, synthetic data, ~3 s
+uv run pytest -q                          # 72 tests, synthetic data, ~8 s
+```
+
+Phase 2 (GPU, separate conda env; about 9 h in total on the laptop: GEARS split 4.7 h, folds 1.1 h and
+1.8 h): see `phase2/README.md` for the full command list.
+
+```bash
+conda env create -f phase2/environment.yml && conda run -n pbench-phase2 pip install -e phase2
+uv run pbench export-splits configs/main_measured.yaml --folds 0 1
+conda run -n pbench-phase2 python -m scgpt_ft split-gears
+# … scgpt_ft run for the GEARS split and folds 0–1 (phase2/README.md) …
+uv run pbench score-external configs/phase2.yaml && uv run pbench report configs/phase2.yaml
 ```
 
 If `gdown` hits a Google Drive quota, download scGPT's `whole_human` folder manually into
